@@ -459,9 +459,11 @@ public class CallMonitorService extends Service {
         try {
             CustomExceptionHandler.log(this, "attemptAutoAnswer() START");
 
-            if (!isAppDefaultDialer()) {
-                CustomExceptionHandler.log(this, "attemptAutoAnswer aborted: app is NOT default dialer");
-                return;
+            boolean isDefault = isAppDefaultDialer();
+            CustomExceptionHandler.log(this, "isAppDefaultDialer = " + isDefault);
+
+            if (!isDefault) {
+                CustomExceptionHandler.log(this, "Warning: app is NOT default dialer, trying anyway");
             }
 
             if (Build.VERSION.SDK_INT >= 26) {
@@ -474,13 +476,14 @@ public class CallMonitorService extends Service {
                             CustomExceptionHandler.log(this, "acceptRingingCall() invoked");
                         } catch (Exception e) {
                             Log.e("CallMonitorService", "Failed to answer call", e);
+                            CustomExceptionHandler.log(this, "acceptRingingCall() EXCEPTION: " + e.getMessage());
                             CustomExceptionHandler.logError(this, e);
                         }
                     } else {
-                        Log.e("CallMonitorService", "ANSWER_PHONE_CALLS permission not granted");
+                        CustomExceptionHandler.log(this, "ANSWER_PHONE_CALLS permission not granted");
                     }
                 } else {
-                    CustomExceptionHandler.log(this, "TelecomManager null");
+                    CustomExceptionHandler.log(this, "TelecomManager is null");
                 }
             } else {
                 CustomExceptionHandler.log(this, "Unsupported SDK for TelecomManager.acceptRingingCall()");
@@ -494,7 +497,9 @@ public class CallMonitorService extends Service {
                 intent = new Intent(Intent.ACTION_MEDIA_BUTTON);
                 intent.putExtra(Intent.EXTRA_KEY_EVENT, new KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_HEADSETHOOK));
                 sendOrderedBroadcast(intent, null);
-            } catch (Exception ignored) {
+                CustomExceptionHandler.log(this, "Fallback headset hook broadcast sent");
+            } catch (Exception e) {
+                CustomExceptionHandler.log(this, "Fallback headset hook EXCEPTION: " + e.getMessage());
             }
         } catch (Throwable e) {
             CustomExceptionHandler.log(this, "attemptAutoAnswer exception: " + e.getMessage());
