@@ -27,6 +27,8 @@ public class ReportService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        boolean sendTelegram = intent != null && intent.getBooleanExtra("sendTelegram", false);
+
         startForeground(2001, new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle("Telegram Call Notifier")
                 .setContentText("Background service running")
@@ -36,8 +38,10 @@ public class ReportService extends Service {
 
         new Thread(() -> {
             try {
-                Log.d("ReportService", "Sending report now");
-                sendReportNow();
+                Log.d("ReportService", "Report requested. sendTelegram=" + sendTelegram);
+                if (sendTelegram) {
+                    sendReportNow();
+                }
             } catch (Exception e) {
                 Log.e("ReportService", "Error sending report", e);
             } finally {

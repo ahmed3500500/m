@@ -3,6 +3,7 @@ package com.example.telegramcallnotifier;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.PowerManager;
 import android.util.Log;
@@ -12,6 +13,20 @@ public class AlarmReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
         Log.d("AlarmReceiver", "Alarm fired");
+
+        SharedPreferences prefs = context.getSharedPreferences("alarm_prefs", Context.MODE_PRIVATE);
+        int alarmCounter = prefs.getInt("alarm_counter", 0);
+
+        alarmCounter++;
+
+        boolean sendTelegram = false;
+
+        if (alarmCounter >= 30) {
+            sendTelegram = true;
+            alarmCounter = 0;
+        }
+
+        prefs.edit().putInt("alarm_counter", alarmCounter).apply();
 
         PowerManager powerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
         PowerManager.WakeLock wakeLock = null;
@@ -31,6 +46,7 @@ public class AlarmReceiver extends BroadcastReceiver {
 
             Intent serviceIntent = new Intent(context, ReportService.class);
             serviceIntent.setAction("SEND_REPORT_NOW");
+            serviceIntent.putExtra("sendTelegram", sendTelegram);
 
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
