@@ -694,25 +694,6 @@ public class CallMonitorService extends Service {
         msg.append("⏰ Time: ").append(time);
         
         telegramSender.sendStatusMessage(msg.toString());
-        wakeScreen20Seconds();
-    }
-
-    private void wakeScreen20Seconds() {
-        try {
-            PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
-
-            if (pm != null) {
-                PowerManager.WakeLock wl = pm.newWakeLock(
-                        PowerManager.SCREEN_BRIGHT_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP,
-                        "TelegramCallNotifier:ScreenWake"
-                );
-
-                wl.acquire(20000);
-                CustomExceptionHandler.log(this, "Screen wake triggered for 20 seconds");
-            }
-        } catch (Exception e) {
-            CustomExceptionHandler.log(this, "wakeScreen20Seconds error: " + e.getMessage());
-        }
     }
 
     private String getBatteryInfoString() {
