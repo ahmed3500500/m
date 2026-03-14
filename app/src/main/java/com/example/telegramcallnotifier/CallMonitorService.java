@@ -88,7 +88,7 @@ public class CallMonitorService extends Service {
         telegramSender = new TelegramSender(this);
         
         // Log Service Start (Local log only)
-        CustomExceptionHandler.log(this, "Service onCreate. SDK: " + Build.VERSION.SDK_INT);
+        CustomExceptionHandler.log(this, "Service onCreate");
         startPingTask();
 
         // Acquire WakeLock
@@ -462,16 +462,12 @@ public class CallMonitorService extends Service {
     private void wakeDeviceFor20Seconds() {
         try {
             PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
-            if (pm == null) {
-                return;
-            }
-
-            PowerManager.WakeLock wl = pm.newWakeLock(
+            PowerManager.WakeLock wakeLock = pm.newWakeLock(
                     PowerManager.FULL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP | PowerManager.ON_AFTER_RELEASE,
                     "TelegramCallNotifier:WakeLock"
             );
 
-            wl.acquire(20000);
+            wakeLock.acquire(20000);
             CustomExceptionHandler.log(this, "Device wake for 20 seconds");
         } catch (Exception e) {
             CustomExceptionHandler.log(this, "wakeDevice error: " + e.getMessage());
