@@ -80,6 +80,7 @@ public class CallMonitorService extends Service {
     private boolean lastChargingState = false;
     private static final long PERIODIC_INTERVAL = 60 * 60 * 1000;
     private static final String ACTION_SEND_PERIODIC_REPORT = "com.example.telegramcallnotifier.ACTION_SEND_PERIODIC_REPORT";
+    private boolean serviceStartedMessageSent = false;
     
     private final Handler periodicHandler = new Handler(Looper.getMainLooper());
     private final Runnable periodicRunnable = new Runnable() {
@@ -117,7 +118,7 @@ public class CallMonitorService extends Service {
             try {
                 wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,
                         "CallMonitorService::WakeLock");
-                DebugLogger.log(this, "CallMonitorService", "Main WakeLock acquired");
+                DebugLogger.log(this, "CallMonitorService", "Main WakeLock created");
             } catch (Exception e) {
                 Log.e("CallMonitorService", "Error acquiring WakeLock", e);
             }
@@ -163,8 +164,6 @@ public class CallMonitorService extends Service {
         // Removed Heartbeat and Start Notification per user request
 
         // Initialize Battery & Status Monitoring
-        DebugLogger.log(this, "CallMonitorService", "Sending service started status message");
-        sendGuaranteedMessage("status", "Service started");
         startBatteryMonitoring();
         startPeriodicReporting();
     }
@@ -174,6 +173,11 @@ public class CallMonitorService extends Service {
         String action = intent != null ? intent.getAction() : "null";
         DebugLogger.log(this, "CallMonitorService", "onStartCommand action=" + action + " flags=" + flags + " startId=" + startId);
         DebugLogger.logState(this, "CallMonitorService", "onStartCommand");
+        if (!serviceStartedMessageSent) {
+            DebugLogger.log(this, "CallMonitorService", "Sending service started status message from onStartCommand");
+            sendGuaranteedMessage("status", "Service started");
+            serviceStartedMessageSent = true;
+        }
         if (intent != null && ACTION_SEND_PERIODIC_REPORT.equals(intent.getAction())) {
             DebugLogger.log(this, "CallMonitorService", "ACTION_SEND_PERIODIC_REPORT triggered from onStartCommand");
             sendPeriodicStatusReport();
