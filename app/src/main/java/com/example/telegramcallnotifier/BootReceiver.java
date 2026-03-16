@@ -4,17 +4,17 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
-import android.util.Log;
 
 public class BootReceiver extends BroadcastReceiver {
     private static final String TAG = "BootReceiver";
 
     @Override
     public void onReceive(Context context, Intent intent) {
-        if (intent == null || intent.getAction() == null) return;
+        String action = (intent != null ? intent.getAction() : null);
+        DebugLogger.log(context, TAG, "onReceive action=" + action);
+        DebugLogger.logState(context, TAG, "boot receiver");
 
-        String action = intent.getAction();
-        Log.d(TAG, "Received action: " + action);
+        if (action == null) return;
 
         if (Intent.ACTION_BOOT_COMPLETED.equals(action)
                 || Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)
@@ -32,8 +32,9 @@ public class BootReceiver extends BroadcastReceiver {
                 } else {
                     context.startService(reportIntent);
                 }
+                DebugLogger.log(context, TAG, "ReportService start requested after boot");
             } catch (Exception e) {
-                Log.e(TAG, "Failed to start service after boot", e);
+                DebugLogger.logError(context, TAG, e);
             }
 
             try {
@@ -43,11 +44,12 @@ public class BootReceiver extends BroadcastReceiver {
                 } else {
                     context.startService(callMonitorIntent);
                 }
+                DebugLogger.log(context, TAG, "CallMonitorService start requested after boot");
             } catch (Exception e) {
-                Log.e(TAG, "Failed to start CallMonitorService after boot", e);
+                DebugLogger.logError(context, TAG, e);
             }
 
-            Log.d(TAG, "Foreground service + alarm started after boot");
+            DebugLogger.log(context, TAG, "Foreground service + alarm started after boot");
         }
     }
 }

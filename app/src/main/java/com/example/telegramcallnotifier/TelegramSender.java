@@ -27,35 +27,36 @@ public class TelegramSender {
     }
 
     public void sendMessage(String message) {
-        CustomExceptionHandler.log(context, "CALL sendMessage() called. msg=" + truncate(message, 500));
+        DebugLogger.log(context, TAG, "CALL sendMessage() called. msg=" + truncate(message, 500));
         sendToServer("call", message);
     }
-    
+
     public void sendStatusMessage(String message) {
-        CustomExceptionHandler.log(context, "REPORT sendStatusMessage() called. msg=" + truncate(message, 500));
+        DebugLogger.log(context, TAG, "REPORT sendStatusMessage() called. msg=" + truncate(message, 500));
         sendToServer("report", message);
     }
 
     public void sendPing() {
-        CustomExceptionHandler.log(context, "PING sendPing() called");
+        DebugLogger.log(context, TAG, "PING sendPing() called");
         sendToServer("ping", "alive");
     }
 
     public void sendToServer(String type, String text) {
         if (text == null || text.isEmpty()) {
-            CustomExceptionHandler.log(context, "sendToServer skipped: empty text. type=" + type);
+            DebugLogger.log(context, TAG, "sendToServer skipped: empty text. type=" + type);
             return;
         }
         final String finalType = (type == null || type.isEmpty()) ? "unknown" : type;
         final String finalText = text;
 
-        CustomExceptionHandler.log(context, "sendToServer start. type=" + finalType + " text=" + truncate(finalText, 500));
+        DebugLogger.log(context, TAG, "sendToServer start. type=" + finalType + " text=" + truncate(finalText, 500));
+        DebugLogger.logState(context, TAG, "before http request");
 
         executor.execute(() -> {
             HttpURLConnection conn = null;
             try {
                 URL url = new URL(SERVER_URL);
-                CustomExceptionHandler.log(context, "Opening connection to " + SERVER_URL);
+                DebugLogger.log(context, TAG, "Opening connection to " + SERVER_URL);
                 conn = (HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("POST");
                 conn.setConnectTimeout(20000);
@@ -69,7 +70,7 @@ public class TelegramSender {
                         + "\"text\":\"" + escapeJson(finalText) + "\""
                         + "}";
 
-                CustomExceptionHandler.log(context, "JSON payload ready. len=" + json.length());
+                DebugLogger.log(context, TAG, "JSON payload ready. len=" + json.length());
                 byte[] payload = json.getBytes(StandardCharsets.UTF_8);
                 conn.setFixedLengthStreamingMode(payload.length);
 
@@ -77,27 +78,30 @@ public class TelegramSender {
                 os.write(payload);
                 os.flush();
                 os.close();
+                DebugLogger.log(context, TAG, "Payload sent bytes=" + payload.length);
 
                 int responseCode = conn.getResponseCode();
                 String responseBody = readBody(conn, responseCode >= 200 && responseCode < 300);
 
-                CustomExceptionHandler.log(context, "Server response code=" + responseCode);
+                DebugLogger.log(context, TAG, "Server response code=" + responseCode);
                 if (responseCode >= 200 && responseCode < 300) {
                     Log.d(TAG, "Server OK: " + responseCode);
                 } else {
                     Log.e(TAG, "Server failed: " + responseCode);
                 }
 
-                CustomExceptionHandler.log(context, "Server response body=" + truncate(responseBody, 2000));
+                DebugLogger.log(context, TAG, "Server response body=" + truncate(responseBody, 2000));
             } catch (Exception e) {
-                CustomExceptionHandler.log(context, "sendToServer exception: " + e.getClass().getSimpleName() + " - " + e.getMessage());
+                DebugLogger.log(context, TAG, "sendToServer exception: " + e.getClass().getSimpleName() + " - " + e.getMessage());
                 Log.e(TAG, "Error sending to server", e);
-                CustomExceptionHandler.logError(context, e);
+                DebugLogger.logError(context, TAG, e);
             } finally {
                 if (conn != null) {
                     try {
                         conn.disconnect();
-                    } catch (Exception ignored) {
+                        DebugLogger.log(context, TAG, "Connection closed");
+                    } catch (Exception e) {
+                        DebugLogger.logError(context, TAG, e);
                     }
                 }
             }

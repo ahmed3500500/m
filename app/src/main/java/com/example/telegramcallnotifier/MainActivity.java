@@ -1,10 +1,9 @@
 package com.example.telegramcallnotifier;
 
 import android.Manifest;
-import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -12,15 +11,14 @@ import android.os.PowerManager;
 import android.provider.Settings;
 import android.view.View;
 import android.widget.Button;
-import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
-import androidx.core.content.FileProvider;
 import androidx.core.content.ContextCompat;
+import androidx.core.content.FileProvider;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -31,7 +29,7 @@ public class MainActivity extends AppCompatActivity {
     private static final int PERMISSION_REQUEST_CODE = 100;
     private static final int BATTERY_OPTIMIZATION_REQUEST_CODE = 200;
     private static final int EXACT_ALARM_REQUEST_CODE = 201;
-    
+
     private TelegramSender telegramSender;
     private Button btnToggleService;
     private Button btnViewLogs;
@@ -42,19 +40,26 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // Setup Crash Handler
         exceptionHandler = new CustomExceptionHandler(this);
         Thread.setDefaultUncaughtExceptionHandler(exceptionHandler);
+
+        DebugLogger.log(this, "MainActivity", "onCreate intent=" + getIntent());
+        DebugLogger.logState(this, "MainActivity", "onCreate");
 
         setContentView(R.layout.activity_main);
 
         Intent reportServiceIntent = new Intent(this, ReportService.class);
         reportServiceIntent.setAction("START_FOREGROUND_SERVICE");
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(reportServiceIntent);
-        } else {
-            startService(reportServiceIntent);
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(reportServiceIntent);
+            } else {
+                startService(reportServiceIntent);
+            }
+            DebugLogger.log(this, "MainActivity", "ReportService start requested from onCreate");
+        } catch (Exception e) {
+            DebugLogger.logError(this, "MainActivity", e);
         }
 
         AlarmScheduler.scheduleNext(this, AlarmScheduler.TEST_INTERVAL_MS);
@@ -68,6 +73,7 @@ public class MainActivity extends AppCompatActivity {
         btnToggleService.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                DebugLogger.log(MainActivity.this, "MainActivity", "btnToggleService clicked isServiceRunning=" + isServiceRunning());
                 if (isServiceRunning()) {
                     stopService();
                 } else {
@@ -79,32 +85,53 @@ public class MainActivity extends AppCompatActivity {
         btnViewLogs.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                DebugLogger.log(MainActivity.this, "MainActivity", "btnViewLogs clicked");
                 openLogFile();
             }
         });
 
-        // Try auto-start if permissions allow, otherwise flow will handle it
-        checkPermissionsAndStartService(); 
+        checkPermissionsAndStartService();
         updateUI();
 
-        // Log start
-        CustomExceptionHandler.log(this, "App Started. SDK: " + Build.VERSION.SDK_INT);
+        DebugLogger.log(this, "MainActivity", "App Started. SDK=" + Build.VERSION.SDK_INT);
     }
-    
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        DebugLogger.log(this, "MainActivity", "onStart");
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
+        DebugLogger.log(this, "MainActivity", "onResume");
+        DebugLogger.logState(this, "MainActivity", "onResume");
         updateUI();
     }
 
+    @Override
+    protected void onPause() {
+        super.onPause();
+        DebugLogger.log(this, "MainActivity", "onPause");
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        DebugLogger.log(this, "MainActivity", "onDestroy");
+    }
+
     private void updateUI() {
-        if (isServiceRunning()) {
+        boolean running = isServiceRunning();
+        DebugLogger.log(this, "MainActivity", "updateUI running=" + running);
+        if (running) {
             btnToggleService.setText("RUNNING");
-            btnToggleService.setBackgroundTintList(android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#4CAF50"))); // Green
+            btnToggleService.setBackgroundTintList(android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#4CAF50")));
             textStatus.setText("Status: Service is Active");
         } else {
             btnToggleService.setText("START");
-            btnToggleService.setBackgroundTintList(android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#F44336"))); // Red
+            btnToggleService.setBackgroundTintList(android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#F44336")));
             textStatus.setText("Status: Service Stopped");
         }
     }
@@ -128,8 +155,10 @@ public class MainActivity extends AppCompatActivity {
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
 
         try {
+            DebugLogger.log(this, "MainActivity", "Opening log file path=" + logFile.getAbsolutePath());
             startActivity(Intent.createChooser(intent, "Open logs"));
         } catch (Exception e) {
+            DebugLogger.logError(this, "MainActivity", e);
             showLogs();
         }
     }
@@ -145,39 +174,44 @@ public class MainActivity extends AppCompatActivity {
         }
         return false;
     }
-    
+
     private void stopService() {
+        DebugLogger.log(this, "MainActivity", "stopService requested");
         Intent serviceIntent = new Intent(this, CallMonitorService.class);
         stopService(serviceIntent);
         updateUI();
-        // Delay update to double check
         new android.os.Handler().postDelayed(this::updateUI, 500);
     }
 
     private boolean needsExactAlarmPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             android.app.AlarmManager alarmManager = (android.app.AlarmManager) getSystemService(ALARM_SERVICE);
-            return alarmManager != null && !alarmManager.canScheduleExactAlarms();
+            boolean needs = alarmManager != null && !alarmManager.canScheduleExactAlarms();
+            DebugLogger.log(this, "MainActivity", "needsExactAlarmPermission=" + needs);
+            return needs;
         }
         return false;
     }
 
     private void checkExactAlarmAndStart() {
+        DebugLogger.log(this, "MainActivity", "checkExactAlarmAndStart called");
         if (needsExactAlarmPermission()) {
             try {
                 Intent intent = new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM);
                 intent.setData(Uri.parse("package:" + getPackageName()));
                 startActivityForResult(intent, EXACT_ALARM_REQUEST_CODE);
                 Toast.makeText(this, "Please allow exact alarms so the 60-minute report works while the screen is off", Toast.LENGTH_LONG).show();
+                DebugLogger.log(this, "MainActivity", "Requested exact alarm permission");
                 return;
             } catch (Exception e) {
-                e.printStackTrace();
+                DebugLogger.logError(this, "MainActivity", e);
             }
         }
         checkBatteryAndStart();
     }
 
     private void checkBatteryAndStart() {
+        DebugLogger.log(this, "MainActivity", "checkBatteryAndStart called");
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
             if (pm != null && !pm.isIgnoringBatteryOptimizations(getPackageName())) {
@@ -185,11 +219,11 @@ public class MainActivity extends AppCompatActivity {
                     Intent intent = new Intent();
                     intent.setAction(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
                     intent.setData(Uri.parse("package:" + getPackageName()));
-                    startActivityForResult(intent, BATTERY_OPTIMIZATION_REQUEST_CODE); // 200 = Battery Request
+                    startActivityForResult(intent, BATTERY_OPTIMIZATION_REQUEST_CODE);
+                    DebugLogger.log(this, "MainActivity", "Requested battery optimization ignore");
                     return;
                 } catch (Exception e) {
-                    e.printStackTrace();
-                    // If it fails, just try to start service anyway
+                    DebugLogger.logError(this, "MainActivity", e);
                 }
             }
         }
@@ -197,26 +231,27 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void checkPermissionsAndStartService() {
+        DebugLogger.log(this, "MainActivity", "checkPermissionsAndStartService called");
         List<String> permsList = new ArrayList<>();
         permsList.add(Manifest.permission.READ_PHONE_STATE);
         permsList.add(Manifest.permission.READ_CALL_LOG);
         permsList.add(Manifest.permission.ANSWER_PHONE_CALLS);
         permsList.add(Manifest.permission.CALL_PHONE);
-        
+
         if (Build.VERSION.SDK_INT >= 26) {
             permsList.add(Manifest.permission.READ_PHONE_NUMBERS);
         }
-        
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             permsList.add(Manifest.permission.FOREGROUND_SERVICE);
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-             permsList.add(Manifest.permission.POST_NOTIFICATIONS);
+            permsList.add(Manifest.permission.POST_NOTIFICATIONS);
         }
-        
+
         if (Build.VERSION.SDK_INT >= 34) {
-             permsList.add(Manifest.permission.FOREGROUND_SERVICE_DATA_SYNC);
+            permsList.add(Manifest.permission.FOREGROUND_SERVICE_DATA_SYNC);
         }
 
         List<String> listPermissionsNeeded = new ArrayList<>();
@@ -225,6 +260,8 @@ public class MainActivity extends AppCompatActivity {
                 listPermissionsNeeded.add(p);
             }
         }
+
+        DebugLogger.log(this, "MainActivity", "Missing permissions count=" + listPermissionsNeeded.size() + " list=" + listPermissionsNeeded);
 
         if (!listPermissionsNeeded.isEmpty()) {
             ActivityCompat.requestPermissions(this, listPermissionsNeeded.toArray(new String[0]), PERMISSION_REQUEST_CODE);
@@ -236,6 +273,7 @@ public class MainActivity extends AppCompatActivity {
     private void startService() {
         Intent serviceIntent = new Intent(this, CallMonitorService.class);
         try {
+            DebugLogger.log(this, "MainActivity", "startService requested");
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 startForegroundService(serviceIntent);
             } else {
@@ -244,7 +282,7 @@ public class MainActivity extends AppCompatActivity {
 
             new android.os.Handler().postDelayed(this::updateUI, 500);
         } catch (Throwable e) {
-            e.printStackTrace();
+            DebugLogger.logError(this, "MainActivity", e);
             Toast.makeText(this, "Error starting service: " + e.getMessage(), Toast.LENGTH_LONG).show();
             textStatus.setText("Error: " + e.getMessage());
         }
@@ -253,8 +291,11 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        DebugLogger.log(this, "MainActivity", "onRequestPermissionsResult requestCode=" + requestCode + " grantCount=" + grantResults.length);
         if (requestCode == PERMISSION_REQUEST_CODE) {
-            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            boolean granted = grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED;
+            DebugLogger.log(this, "MainActivity", "permissions granted(firstOnly check)=" + granted);
+            if (granted) {
                 checkExactAlarmAndStart();
             } else {
                 Toast.makeText(this, "Permissions are required for the app to work", Toast.LENGTH_LONG).show();
@@ -265,6 +306,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        DebugLogger.log(this, "MainActivity", "onActivityResult requestCode=" + requestCode + " resultCode=" + resultCode + " data=" + data);
 
         if (requestCode == BATTERY_OPTIMIZATION_REQUEST_CODE) {
             startService();

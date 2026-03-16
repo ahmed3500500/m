@@ -6,7 +6,6 @@ import android.app.Service;
 import android.content.Intent;
 import android.os.Build;
 import android.os.IBinder;
-import android.util.Log;
 
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
@@ -25,14 +24,17 @@ public class ReportService extends Service {
     public void onCreate() {
         super.onCreate();
         createChannel();
-        Log.d(TAG, "onCreate");
+        DebugLogger.log(this, TAG, "onCreate");
+        DebugLogger.logState(this, TAG, "service created");
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         boolean sendTelegram = intent != null && intent.getBooleanExtra("sendTelegram", false);
+        String action = intent != null ? intent.getAction() : "null";
 
-        Log.d(TAG, "onStartCommand");
+        DebugLogger.log(this, TAG, "onStartCommand action=" + action + " flags=" + flags + " startId=" + startId + " sendTelegram=" + sendTelegram);
+        DebugLogger.logState(this, TAG, "onStartCommand");
 
         startForeground(NOTIFICATION_ID, new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle("Telegram Call Notifier")
@@ -41,16 +43,19 @@ public class ReportService extends Service {
                 .setOngoing(true)
                 .build());
 
+        DebugLogger.log(this, TAG, "startForeground success");
+
         new Thread(() -> {
             try {
-                Log.d(TAG, "Background task started. sendTelegram=" + sendTelegram);
+                DebugLogger.log(ReportService.this, TAG, "Background task started. sendTelegram=" + sendTelegram);
                 if (sendTelegram) {
+                    DebugLogger.log(ReportService.this, TAG, "sendReportNow requested");
                     sendReportNow();
                 }
             } catch (Exception e) {
-                Log.e(TAG, "Error in background task", e);
+                DebugLogger.logError(ReportService.this, TAG, e);
             }
-        }).start();
+        }, "ReportServiceWorker").start();
 
         return START_STICKY;
     }
@@ -58,6 +63,7 @@ public class ReportService extends Service {
     private void sendReportNow() {
         String time = new SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(new Date());
         TelegramSender sender = new TelegramSender(this);
+        DebugLogger.log(this, TAG, "sendReportNow building message time=" + time);
         sender.sendStatusMessage("⏰ Alarm report\nTime: " + time);
     }
 
@@ -73,6 +79,12 @@ public class ReportService extends Service {
                 manager.createNotificationChannel(channel);
             }
         }
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        DebugLogger.log(this, TAG, "onDestroy");
     }
 
     @Nullable

@@ -73,6 +73,7 @@ public class CallMonitorService extends Service {
         @Override
         public void run() {
             try {
+                DebugLogger.log(CallMonitorService.this, "CallMonitorService", "periodicRunnable fired");
                 sendPeriodicStatusReport();
             } finally {
                 periodicHandler.postDelayed(this, PERIODIC_INTERVAL);
@@ -84,12 +85,15 @@ public class CallMonitorService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        DebugLogger.log(this, "CallMonitorService", "onCreate");
+        DebugLogger.logState(this, "CallMonitorService", "service create");
         createNotificationChannel();
         telegramSender = new TelegramSender(this);
         
         // Log Service Start (Local log only)
         CustomExceptionHandler.log(this, "Service onCreate");
         startPingTask();
+        DebugLogger.log(this, "CallMonitorService", "startPingTask scheduled");
 
         // Acquire WakeLock
         PowerManager powerManager = (PowerManager) getSystemService(POWER_SERVICE);
@@ -98,6 +102,7 @@ public class CallMonitorService extends Service {
                 wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,
                         "CallMonitorService::WakeLock");
                 wakeLock.acquire();
+                DebugLogger.log(this, "CallMonitorService", "Main WakeLock acquired");
             } catch (Exception e) {
                 Log.e("CallMonitorService", "Error acquiring WakeLock", e);
             }
@@ -117,13 +122,16 @@ public class CallMonitorService extends Service {
         try {
             if (Build.VERSION.SDK_INT >= 34) {
                 startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
+                DebugLogger.log(this, "CallMonitorService", "Foreground started (type DATA_SYNC)");
             } else {
                 startForeground(NOTIFICATION_ID, notification);
+                DebugLogger.log(this, "CallMonitorService", "Foreground started");
             }
         } catch (Throwable e) {
             Log.e("CallMonitorService", "Error starting foreground service", e);
             try {
                 startForeground(NOTIFICATION_ID, notification);
+                DebugLogger.log(this, "CallMonitorService", "Foreground started in fallback path");
             } catch (Throwable t) {
                 Log.e("CallMonitorService", "Fatal error starting foreground", t);
             }
@@ -132,6 +140,7 @@ public class CallMonitorService extends Service {
         // Register Phone Listener
         telephonyManager = (TelephonyManager) getSystemService(TELEPHONY_SERVICE);
         registerPhoneListener();
+        DebugLogger.log(this, "CallMonitorService", "registerPhoneListener finished");
         
         // Removed registerCallReceiver() to rely solely on SubscriptionManager/PhoneStateListener
         // This prevents the "Unknown SIM" (-1) from overwriting the correct SIM slot.
@@ -139,6 +148,7 @@ public class CallMonitorService extends Service {
         // Removed Heartbeat and Start Notification per user request
 
         // Initialize Battery & Status Monitoring
+        DebugLogger.log(this, "CallMonitorService", "Sending service started status message");
         telegramSender.sendStatusMessage("Service started");
         startBatteryMonitoring();
         startPeriodicReporting();
@@ -146,7 +156,11 @@ public class CallMonitorService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        String action = intent != null ? intent.getAction() : "null";
+        DebugLogger.log(this, "CallMonitorService", "onStartCommand action=" + action + " flags=" + flags + " startId=" + startId);
+        DebugLogger.logState(this, "CallMonitorService", "onStartCommand");
         if (intent != null && ACTION_SEND_PERIODIC_REPORT.equals(intent.getAction())) {
+            DebugLogger.log(this, "CallMonitorService", "ACTION_SEND_PERIODIC_REPORT triggered from onStartCommand");
             sendPeriodicStatusReport();
             restartInProcessPeriodicLoop();
             scheduleNextReport();
@@ -176,12 +190,15 @@ public class CallMonitorService extends Service {
                 }
             } else {
                 // Fallback for single SIM or if list is empty
+                DebugLogger.log(this, "CallMonitorService", "No active subscriptions found, fallback listener used");
                 if (Build.VERSION.SDK_INT >= 31) {
                     registerTelephonyCallback();
                 } else {
                     registerLegacyPhoneListener();
                 }
             }
+        } else {
+            DebugLogger.log(this, "CallMonitorService", "READ_PHONE_STATE permission missing, cannot register multi-sim listeners");
         }
     }
 
@@ -206,6 +223,7 @@ public class CallMonitorService extends Service {
             };
             subTm.listen(listener, PhoneStateListener.LISTEN_CALL_STATE);
             activeListeners.add(listener); // Keep strong reference
+            DebugLogger.log(this, "CallMonitorService", "Listener registered for subId=" + subId + " simSlot=" + simSlot);
         } catch (Exception e) {
             Log.e("CallMonitorService", "Error registering listener for SIM " + simSlot, e);
             CustomExceptionHandler.logError(CallMonitorService.this, e);
@@ -231,7 +249,9 @@ public class CallMonitorService extends Service {
                 }
             };
             telephonyManager.listen(phoneStateListener, PhoneStateListener.LISTEN_CALL_STATE);
+            DebugLogger.log(this, "CallMonitorService", "Legacy phone listener registered");
         } catch (SecurityException e) {
+            DebugLogger.logError(this, "CallMonitorService", e);
             Log.e("CallMonitorService", "Permission missing for phone listener", e);
         } catch (Exception e) {
             Log.e("CallMonitorService", "Error registering legacy listener", e);
@@ -243,7 +263,9 @@ public class CallMonitorService extends Service {
             try {
                 telephonyCallback = new CallStateCallback();
                 telephonyManager.registerTelephonyCallback(getMainExecutor(), (TelephonyCallback) telephonyCallback);
+                DebugLogger.log(this, "CallMonitorService", "TelephonyCallback registered");
             } catch (SecurityException e) {
+            DebugLogger.logError(this, "CallMonitorService", e);
                  Log.e("CallMonitorService", "Permission missing for telephony callback", e);
             } catch (Exception e) {
                  Log.e("CallMonitorService", "Error registering telephony callback", e);
@@ -611,8 +633,12 @@ public class CallMonitorService extends Service {
             PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
         long triggerAtMillis = System.currentTimeMillis() + PERIODIC_INTERVAL;
+        DebugLogger.log(this, "CallMonitorService", "scheduleNextReport triggerAt=" + triggerAtMillis + " now=" + System.currentTimeMillis());
 
-        if (alarmManager == null) return;
+        if (alarmManager == null) {
+            DebugLogger.log(this, "CallMonitorService", "scheduleNextReport skipped alarmManager is null");
+            return;
+        }
 
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
@@ -621,28 +647,35 @@ public class CallMonitorService extends Service {
                         triggerAtMillis,
                         pendingIntent
                 );
+                DebugLogger.log(this, "CallMonitorService", "scheduleNextReport used setAndAllowWhileIdle because exact alarm permission missing");
                 return;
             }
 
             if (Build.VERSION.SDK_INT >= 23) {
                 alarmManager.setExactAndAllowWhileIdle(android.app.AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent);
+                DebugLogger.log(this, "CallMonitorService", "scheduleNextReport used setExactAndAllowWhileIdle");
             } else if (Build.VERSION.SDK_INT >= 19) {
                 alarmManager.setExact(android.app.AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent);
+                DebugLogger.log(this, "CallMonitorService", "scheduleNextReport used setExact");
             } else {
                 alarmManager.set(android.app.AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent);
+                DebugLogger.log(this, "CallMonitorService", "scheduleNextReport used set");
             }
         } catch (SecurityException e) {
+            DebugLogger.logError(this, "CallMonitorService", e);
             try {
                 alarmManager.setAndAllowWhileIdle(
                         android.app.AlarmManager.RTC_WAKEUP,
                         triggerAtMillis,
                         pendingIntent
                 );
+                DebugLogger.log(this, "CallMonitorService", "scheduleNextReport fallback setAndAllowWhileIdle after SecurityException");
             } catch (Exception inner) {
+                DebugLogger.logError(this, "CallMonitorService", inner);
                 inner.printStackTrace();
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            DebugLogger.logError(this, "CallMonitorService", e);
         }
     }
 
@@ -657,6 +690,7 @@ public class CallMonitorService extends Service {
             
         if (alarmManager != null) {
             alarmManager.cancel(pendingIntent);
+            DebugLogger.log(this, "CallMonitorService", "Periodic report alarm canceled");
         }
     }
 
@@ -707,6 +741,7 @@ public class CallMonitorService extends Service {
     }
 
     private void sendBatteryAlert(String title, String extraInfo) {
+        DebugLogger.log(this, "CallMonitorService", "sendPeriodicStatusReport called");
         String time = new SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(new Date());
         String batteryStatus = getBatteryInfoString();
         
@@ -832,6 +867,8 @@ public class CallMonitorService extends Service {
     @Override
     public void onDestroy() {
         super.onDestroy();
+        DebugLogger.log(this, "CallMonitorService", "onDestroy");
+        DebugLogger.logState(this, "CallMonitorService", "service destroy");
         
         stopBatteryMonitoring();
         stopPeriodicReporting();
@@ -855,7 +892,9 @@ public class CallMonitorService extends Service {
         }
         if (wakeLock != null && wakeLock.isHeld()) {
             wakeLock.release();
+            DebugLogger.log(this, "CallMonitorService", "Main WakeLock released");
         }
+        DebugLogger.log(this, "CallMonitorService", "onDestroy cleanup finished");
         // Removed stop notification
     }
 

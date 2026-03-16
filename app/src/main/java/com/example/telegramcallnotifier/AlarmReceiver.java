@@ -6,16 +6,17 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.PowerManager;
-import android.util.Log;
 
 public class AlarmReceiver extends BroadcastReceiver {
 
     @Override
     public void onReceive(Context context, Intent intent) {
-        Log.d("AlarmReceiver", "Alarm fired");
+        DebugLogger.log(context, "AlarmReceiver", "onReceive action=" + (intent != null ? intent.getAction() : "null"));
+        DebugLogger.logState(context, "AlarmReceiver", "alarm fired");
 
         SharedPreferences prefs = context.getSharedPreferences("alarm_prefs", Context.MODE_PRIVATE);
         int alarmCounter = prefs.getInt("alarm_counter", 0);
+        DebugLogger.log(context, "AlarmReceiver", "alarmCounter(before)=" + alarmCounter);
 
         alarmCounter++;
 
@@ -27,21 +28,27 @@ public class AlarmReceiver extends BroadcastReceiver {
         }
 
         prefs.edit().putInt("alarm_counter", alarmCounter).apply();
+        DebugLogger.log(context, "AlarmReceiver", "alarmCounter(after)=" + alarmCounter + " sendTelegram=" + sendTelegram);
 
         PowerManager powerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
         PowerManager.WakeLock wakeLock = null;
 
         try {
             if (powerManager != null) {
+                DebugLogger.log(context, "AlarmReceiver", "Trying to acquire WakeLock for 30 seconds");
                 wakeLock = powerManager.newWakeLock(
                         PowerManager.PARTIAL_WAKE_LOCK,
                         "TelegramCallNotifier:AlarmWakeLock"
                 );
                 wakeLock.acquire(30 * 1000L);
+                DebugLogger.log(context, "AlarmReceiver", "WakeLock acquired");
+            } else {
+                DebugLogger.log(context, "AlarmReceiver", "powerManager is null");
             }
 
             Intent wakeIntent = new Intent(context, WakeActivity.class);
             wakeIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            DebugLogger.log(context, "AlarmReceiver", "Starting WakeActivity");
             context.startActivity(wakeIntent);
 
             Intent serviceIntent = new Intent(context, ReportService.class);
@@ -49,24 +56,29 @@ public class AlarmReceiver extends BroadcastReceiver {
             serviceIntent.putExtra("sendTelegram", sendTelegram);
 
             try {
+                DebugLogger.log(context, "AlarmReceiver", "Starting ReportService sendTelegram=" + sendTelegram);
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     context.startForegroundService(serviceIntent);
                 } else {
                     context.startService(serviceIntent);
                 }
+                DebugLogger.log(context, "AlarmReceiver", "ReportService start requested successfully");
             } catch (Exception e) {
-                Log.e("AlarmReceiver", "Failed to start ReportService", e);
+                DebugLogger.logError(context, "AlarmReceiver", e);
             }
 
         } catch (Exception e) {
-            Log.e("AlarmReceiver", "Error in alarm receiver", e);
+            DebugLogger.logError(context, "AlarmReceiver", e);
         } finally {
+            DebugLogger.log(context, "AlarmReceiver", "Scheduling next alarm");
             AlarmScheduler.scheduleNext(context, AlarmScheduler.TEST_INTERVAL_MS);
 
             if (wakeLock != null && wakeLock.isHeld()) {
                 try {
                     wakeLock.release();
-                } catch (Exception ignored) {
+                    DebugLogger.log(context, "AlarmReceiver", "WakeLock released");
+                } catch (Exception e) {
+                    DebugLogger.logError(context, "AlarmReceiver", e);
                 }
             }
         }
