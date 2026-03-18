@@ -77,3 +77,7 @@ exploit/
 
 # Mac
 .DS_Store
+
+# Local tooling
+.jdk/
+.trae_tools/

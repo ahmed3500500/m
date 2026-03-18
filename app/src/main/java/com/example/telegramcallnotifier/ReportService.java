@@ -47,12 +47,13 @@ public class ReportService extends Service {
             DebugLogger.logError(this, TAG, e);
         }
 
-        if (!"ALARM_TRIGGER".equals(action)) {
-            DebugLogger.log(this, TAG, "Background task skipped because action=" + action);
+        final String finalReportType = reportType;
+        final String finalAction = action;
+
+        if ("START_FOREGROUND_SERVICE".equals(finalAction)) {
+            DebugLogger.log(this, TAG, "Background task skipped because action=START_FOREGROUND_SERVICE");
             return START_STICKY;
         }
-
-        final String finalReportType = reportType;
 
         new Thread(() -> {
             try {
@@ -60,6 +61,8 @@ public class ReportService extends Service {
 
                 if ("periodic_status".equals(finalReportType)) {
                     sendPeriodicStatusReportNow();
+                } else if ("keep_alive".equals(finalReportType)) {
+                    sendKeepAliveWakeReportNow();
                 } else {
                     sendReportNow();
                 }
@@ -69,6 +72,36 @@ public class ReportService extends Service {
         }, "ReportServiceWorker").start();
 
         return START_STICKY;
+    }
+
+    private void sendKeepAliveWakeReportNow() {
+        try {
+            int battery = DebugLogger.getBatteryPercent(this);
+            boolean charging = DebugLogger.isCharging(this);
+            String network = DebugLogger.getNetworkSummary(this);
+            boolean wifiEnabled = DebugLogger.isWifiEnabled(this);
+            boolean screenOn = DebugLogger.isInteractive(this);
+
+            String time = new java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
+                    .format(new java.util.Date());
+
+            String msg =
+                    "🟢 KeepAlive Wake Report\n" +
+                            "📱 Device fully awakened\n" +
+                            "🔢 Battery: " + battery + "%\n" +
+                            "⚡️ Charging: " + (charging ? "Yes" : "No") + "\n" +
+                            "📶 Network: " + network + "\n" +
+                            "🌐 Wi-Fi: " + (wifiEnabled ? "On" : "Off") + "\n" +
+                            "📱 Screen: " + (screenOn ? "On" : "Off") + "\n" +
+                            "⏰ Time: " + time;
+
+            DebugLogger.log(this, TAG, "sendKeepAliveWakeReportNow building message time=" + time + " network=" + network + " battery=" + battery);
+            DebugLogger.log(this, TAG, "sendKeepAliveWakeReportNow sending");
+
+            telegramSender.sendStatusMessage(msg);
+        } catch (Exception e) {
+            DebugLogger.logError(this, TAG, e);
+        }
     }
 
     private void sendReportNow() {

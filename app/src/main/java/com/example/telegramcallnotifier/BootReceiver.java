@@ -69,6 +69,13 @@ public class BootReceiver extends BroadcastReceiver {
                 DebugLogger.logError(context, TAG, e);
             }
 
+            try {
+                KeepAliveScheduler.scheduleNext(context, KeepAliveScheduler.KEEP_ALIVE_INTERVAL_MS);
+                DebugLogger.log(context, TAG, "KeepAlive scheduled after boot");
+            } catch (Exception e) {
+                DebugLogger.logError(context, TAG, e);
+            }
+
             DebugLogger.log(context, TAG, "Boot flow finished");
         }
     }

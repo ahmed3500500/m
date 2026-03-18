@@ -182,6 +182,12 @@ public class MainActivity extends AppCompatActivity {
             DebugLogger.logError(this, "MainActivity", e);
         }
 
+        try {
+            KeepAliveScheduler.cancel(this);
+        } catch (Throwable e) {
+            DebugLogger.logError(this, "MainActivity", e);
+        }
+
         updateUI();
         new android.os.Handler().postDelayed(this::updateUI, 500);
     }
@@ -312,6 +318,13 @@ public class MainActivity extends AppCompatActivity {
         try {
             AlarmScheduler.scheduleNext(this, AlarmScheduler.TEST_INTERVAL_MS);
             DebugLogger.log(this, "MainActivity", "AlarmScheduler.scheduleNext requested");
+        } catch (Throwable e) {
+            DebugLogger.logError(this, "MainActivity", e);
+        }
+
+        try {
+            KeepAliveScheduler.scheduleNext(this, KeepAliveScheduler.KEEP_ALIVE_INTERVAL_MS);
+            DebugLogger.log(this, "MainActivity", "KeepAliveScheduler.scheduleNext requested");
         } catch (Throwable e) {
             DebugLogger.logError(this, "MainActivity", e);
         }

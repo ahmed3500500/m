@@ -47,7 +47,7 @@ public class AlarmReceiver extends BroadcastReceiver {
                 DebugLogger.log(context, "AlarmReceiver", "Trying to acquire WakeLock for 30 seconds");
                 wakeLock = powerManager.newWakeLock(
                         PowerManager.PARTIAL_WAKE_LOCK,
-                        "TelegramCallNotifier:AlarmWakeLock"
+                        "app:WAKE"
                 );
                 wakeLock.acquire(30 * 1000L);
                 DebugLogger.log(context, "AlarmReceiver", "WakeLock acquired");

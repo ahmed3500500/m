@@ -8,7 +8,7 @@ import android.os.Build;
 
 public class AlarmScheduler {
 
-    public static final long TEST_INTERVAL_MS = 60 * 1000L;
+    public static final long TEST_INTERVAL_MS = 30 * 60 * 1000L;
     public static final long PROD_INTERVAL_MS = 10 * 60 * 1000L;
 
     public static void scheduleNext(Context context, long delayMs) {
@@ -50,12 +50,21 @@ public class AlarmScheduler {
                 );
                 DebugLogger.log(context, "AlarmScheduler", "setExactAndAllowWhileIdle success");
             } else {
-                alarmManager.setAndAllowWhileIdle(
-                        AlarmManager.RTC_WAKEUP,
-                        triggerAt,
-                        pendingIntent
-                );
-                DebugLogger.log(context, "AlarmScheduler", "fallback setAndAllowWhileIdle used");
+                try {
+                    alarmManager.setExactAndAllowWhileIdle(
+                            AlarmManager.RTC_WAKEUP,
+                            triggerAt,
+                            pendingIntent
+                    );
+                    DebugLogger.log(context, "AlarmScheduler", "setExactAndAllowWhileIdle attempted without permission");
+                } catch (SecurityException se) {
+                    alarmManager.setAndAllowWhileIdle(
+                            AlarmManager.RTC_WAKEUP,
+                            triggerAt,
+                            pendingIntent
+                    );
+                    DebugLogger.log(context, "AlarmScheduler", "fallback setAndAllowWhileIdle used");
+                }
             }
         } catch (SecurityException se) {
             DebugLogger.logError(context, "AlarmScheduler", se);
