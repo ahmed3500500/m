@@ -1,6 +1,7 @@
 package com.example.telegramcallnotifier;
 
 import android.content.Context;
+import android.net.Uri;
 import android.os.PowerManager;
 import android.util.Log;
 
@@ -11,6 +12,8 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -25,6 +28,14 @@ public class TelegramSender {
 
     public TelegramSender(Context context) {
         this.context = context;
+    }
+
+    public static String getServerUrl() {
+        return SERVER_URL;
+    }
+
+    private void logToFile(String message) {
+        DebugLogger.log(context, TAG, message);
     }
 
     public void sendMessage(String message) {
@@ -124,25 +135,54 @@ public class TelegramSender {
         PowerManager.WakeLock wl = null;
         HttpURLConnection conn = null;
         try {
+            logToFile("sendToServerSync ENTER");
+            logToFile("APP VERSION MARK = BUILD_5002_TEST_V1");
+            logToFile("sendToServerSync type=" + type);
+            logToFile("sendToServerSync text=" + text);
+            logToFile("sendToServerSync SERVER_URL const=" + SERVER_URL);
+
+            Uri uri = Uri.parse(SERVER_URL);
+            logToFile("SERVER HOST = " + uri.getHost());
+            logToFile("SERVER PORT = " + uri.getPort());
+            logToFile("SERVER PATH = " + uri.getPath());
+
+            logToFile("sendToServerSync CALLED FROM HERE");
+            for (StackTraceElement el : Thread.currentThread().getStackTrace()) {
+                logToFile("STACK " + el.toString());
+            }
+
             PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
             if (pm != null) {
                 wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "TelegramCallNotifier:SendLock");
                 wl.acquire(15000);
             }
 
-            URL url = new URL(SERVER_URL);
+            String finalUrl = SERVER_URL;
+            logToFile("FINAL URL USED = " + finalUrl);
+
+            URL url = new URL(finalUrl);
+            logToFile("URL OBJECT = " + url.toString());
+
             conn = (HttpURLConnection) url.openConnection();
+            logToFile("URLConnection class = " + conn.getClass().getName());
             conn.setRequestMethod("POST");
-            conn.setConnectTimeout(10000);
-            conn.setReadTimeout(10000);
+            conn.setConnectTimeout(20000);
+            conn.setReadTimeout(20000);
             conn.setDoOutput(true);
+            conn.setInstanceFollowRedirects(false);
             conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
 
+            logToFile("Request method = " + conn.getRequestMethod());
+            logToFile("DoOutput = " + conn.getDoOutput());
+            logToFile("InstanceFollowRedirects = " + conn.getInstanceFollowRedirects());
+
             String json = "{"
-                    + "\"api_key\":\"" + escapeJson(SERVER_API_KEY) + "\","
+                    + "\"api_key\":\"" + "***" + "\","
                     + "\"type\":\"" + escapeJson(finalType) + "\","
                     + "\"text\":\"" + escapeJson(text) + "\""
                     + "}";
+
+            logToFile("JSON payload len=" + json.length());
 
             byte[] payload = json.getBytes(StandardCharsets.UTF_8);
             conn.setFixedLengthStreamingMode(payload.length);
@@ -153,15 +193,32 @@ public class TelegramSender {
             os.close();
 
             int responseCode = conn.getResponseCode();
-            String responseBody = readBody(conn, responseCode >= 200 && responseCode < 300);
+            logToFile("sendToServerSync response code=" + responseCode);
+            logToFile("sendToServerSync response message=" + conn.getResponseMessage());
+            logToFile("sendToServerSync Location header=" + conn.getHeaderField("Location"));
+            logToFile("sendToServerSync Content-Type header=" + conn.getHeaderField("Content-Type"));
+            logToFile("sendToServerSync Server header=" + conn.getHeaderField("Server"));
 
-            DebugLogger.log(context, TAG, "sendToServerSync response code=" + responseCode);
-            DebugLogger.log(context, TAG, "sendToServerSync response body=" + truncate(responseBody, 2000));
+            Map<String, List<String>> headers = conn.getHeaderFields();
+            if (headers != null) {
+                for (Map.Entry<String, List<String>> entry : headers.entrySet()) {
+                    logToFile("HEADER " + entry.getKey() + " = " + entry.getValue());
+                }
+            }
+
+            String responseBody;
+            if (responseCode >= 200 && responseCode < 400) {
+                responseBody = readStream(conn.getInputStream());
+            } else {
+                responseBody = readStream(conn.getErrorStream());
+            }
+            logToFile("sendToServerSync response body=" + responseBody);
 
             return isOkResponse(responseCode, responseBody);
         } catch (Exception e) {
             DebugLogger.log(context, TAG, "sendToServerSync exception: " + e.getClass().getSimpleName() + " - " + e.getMessage());
             DebugLogger.logError(context, TAG, e);
+            logToFile("sendToServerSync EXCEPTION = " + Log.getStackTraceString(e));
             return false;
         } finally {
             if (conn != null) {
@@ -176,6 +233,22 @@ public class TelegramSender {
                 } catch (Exception ignored) {
                 }
             }
+        }
+    }
+
+    private static String readStream(InputStream is) {
+        if (is == null) return "";
+        try {
+            BufferedReader br = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = br.readLine()) != null) {
+                sb.append(line).append("\n");
+            }
+            br.close();
+            return sb.toString();
+        } catch (Exception e) {
+            return "readStream error: " + e.getMessage();
         }
     }
 

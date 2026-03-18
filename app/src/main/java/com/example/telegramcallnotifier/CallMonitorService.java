@@ -88,6 +88,7 @@ public class CallMonitorService extends Service {
         DebugLogger.logState(this, "CallMonitorService", "service create");
         createNotificationChannel();
         telegramSender = new TelegramSender(this);
+        DebugLogger.log(this, "CallMonitorService", "CONFIG SERVER_URL = " + TelegramSender.getServerUrl());
         retryPendingNotifications();
         registerConnectivityReceiver();
         retryHandler.post(retryRunnable);

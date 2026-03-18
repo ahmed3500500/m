@@ -45,6 +45,8 @@ public class MainActivity extends AppCompatActivity {
 
         DebugLogger.log(this, "MainActivity", "onCreate intent=" + getIntent());
         DebugLogger.logState(this, "MainActivity", "onCreate");
+        DebugLogger.log(this, "MainActivity", "APP VERSION MARK = BUILD_5002_TEST_V1");
+        DebugLogger.log(this, "MainActivity", "APP STARTED NEW APK CHECK");
 
         setContentView(R.layout.activity_main);
 
