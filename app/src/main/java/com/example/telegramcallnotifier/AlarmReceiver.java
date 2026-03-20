@@ -45,17 +45,28 @@ public class AlarmReceiver extends BroadcastReceiver {
         DebugLogger.log(context, "AlarmReceiver", "sendPeriodic=" + sendPeriodic);
 
         PowerManager powerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
-        PowerManager.WakeLock wakeLock = null;
+        PowerManager.WakeLock partialWakeLock = null;
+        PowerManager.WakeLock screenWakeLock = null;
 
         try {
             if (powerManager != null) {
-                DebugLogger.log(context, "AlarmReceiver", "Trying to acquire WakeLock for 30 seconds");
-                wakeLock = powerManager.newWakeLock(
+                DebugLogger.log(context, "AlarmReceiver", "Trying to acquire WakeLocks for 30 seconds");
+                
+                // CPU WakeLock
+                partialWakeLock = powerManager.newWakeLock(
                         PowerManager.PARTIAL_WAKE_LOCK,
-                        "app:WAKE"
+                        "TelegramCallNotifier:AlarmWakeLock"
                 );
-                wakeLock.acquire(30 * 1000L);
-                DebugLogger.log(context, "AlarmReceiver", "WakeLock acquired");
+                partialWakeLock.acquire(30 * 1000L);
+                
+                // Force Screen ON WakeLock (Bypasses Activity blocks on Chinese ROMs)
+                screenWakeLock = powerManager.newWakeLock(
+                        PowerManager.SCREEN_BRIGHT_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                        "TelegramCallNotifier:AlarmScreenWakeLock"
+                );
+                screenWakeLock.acquire(30 * 1000L);
+                
+                DebugLogger.log(context, "AlarmReceiver", "WakeLocks acquired (CPU + Screen forced ON)");
             } else {
                 DebugLogger.log(context, "AlarmReceiver", "powerManager is null");
             }
