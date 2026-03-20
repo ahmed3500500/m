@@ -41,6 +41,9 @@ public class CallMonitorService extends Service {
 
     private static final String CHANNEL_ID = "CallMonitorChannel";
     private static final int NOTIFICATION_ID = 1;
+    private static final int CALL_IMMEDIATE_RETRY_COUNT = 5;
+    private static final long CALL_IMMEDIATE_RETRY_DELAY_MS = 2000L;
+    private static final long CALL_SEND_WAKELOCK_MS = 20000L;
     private TelephonyManager telephonyManager;
     private PhoneStateListener phoneStateListener;
     // Keep strong references to listeners to prevent GC
@@ -441,6 +444,109 @@ public class CallMonitorService extends Service {
         }
     }
 
+    private PowerManager.WakeLock acquireCallSendWakeLock() {
+        try {
+            PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+            if (pm == null) return null;
+
+            PowerManager.WakeLock wl = pm.newWakeLock(
+                    PowerManager.PARTIAL_WAKE_LOCK,
+                    "TelegramCallNotifier:CallSendWake"
+            );
+            wl.acquire(CALL_SEND_WAKELOCK_MS);
+            CustomExceptionHandler.log(this, "CallSendWakeLock acquired for " + CALL_SEND_WAKELOCK_MS + " ms");
+            return wl;
+        } catch (Exception e) {
+            CustomExceptionHandler.log(this, "acquireCallSendWakeLock error: " + e.getMessage());
+            CustomExceptionHandler.logError(this, e);
+            return null;
+        }
+    }
+
+    private void sendGuaranteedCallMessageImmediate(String type, String text) {
+        try {
+            String finalType = (type == null || type.isEmpty()) ? "call" : type;
+            String id = finalType + "_" + System.currentTimeMillis();
+
+            PendingNotificationManager.addPending(this, id, finalType, text);
+
+            new Thread(() -> {
+                if (!inFlightPendingIds.add(id)) {
+                    CustomExceptionHandler.log(CallMonitorService.this,
+                            "sendGuaranteedCallMessageImmediate skipped: already in-flight id=" + id);
+                    return;
+                }
+
+                PowerManager.WakeLock sendWakeLock = null;
+                boolean sent = false;
+
+                try {
+                    sendWakeLock = acquireCallSendWakeLock();
+
+                    for (int attempt = 1; attempt <= CALL_IMMEDIATE_RETRY_COUNT; attempt++) {
+                        try {
+                            CustomExceptionHandler.log(CallMonitorService.this,
+                                    "Immediate call send attempt " + attempt + "/" + CALL_IMMEDIATE_RETRY_COUNT + " id=" + id);
+
+                            boolean ok = telegramSender.sendToServerSync(finalType, text);
+                            if (ok) {
+                                PendingNotificationManager.markSent(CallMonitorService.this, id);
+                                CustomExceptionHandler.log(CallMonitorService.this,
+                                        "Immediate call send SUCCESS on attempt " + attempt + " id=" + id);
+                                sent = true;
+                                break;
+                            } else {
+                                CustomExceptionHandler.log(CallMonitorService.this,
+                                        "Immediate call send failed on attempt " + attempt + " id=" + id);
+                            }
+                        } catch (Exception e) {
+                            CustomExceptionHandler.log(CallMonitorService.this,
+                                    "Immediate call send exception on attempt " + attempt + " id=" + id + " msg=" + e.getMessage());
+                            CustomExceptionHandler.logError(CallMonitorService.this, e);
+                        }
+
+                        if (attempt < CALL_IMMEDIATE_RETRY_COUNT) {
+                            try {
+                                Thread.sleep(CALL_IMMEDIATE_RETRY_DELAY_MS);
+                            } catch (InterruptedException ignored) {
+                            }
+                        }
+                    }
+
+                    if (!sent) {
+                        PendingNotificationManager.markRetry(CallMonitorService.this, id);
+                        CustomExceptionHandler.log(CallMonitorService.this,
+                                "Immediate call send exhausted, left pending for normal retry id=" + id);
+                    }
+
+                } catch (Exception e) {
+                    CustomExceptionHandler.log(CallMonitorService.this,
+                            "sendGuaranteedCallMessageImmediate thread error: " + e.getMessage());
+                    CustomExceptionHandler.logError(CallMonitorService.this, e);
+                    PendingNotificationManager.markRetry(CallMonitorService.this, id);
+                } finally {
+                    if (sendWakeLock != null) {
+                        try {
+                            if (sendWakeLock.isHeld()) {
+                                sendWakeLock.release();
+                                CustomExceptionHandler.log(CallMonitorService.this, "CallSendWakeLock released");
+                            }
+                        } catch (Exception e) {
+                            CustomExceptionHandler.log(CallMonitorService.this,
+                                    "CallSendWakeLock release error: " + e.getMessage());
+                        }
+                    }
+
+                    inFlightPendingIds.remove(id);
+                }
+            }).start();
+
+        } catch (Exception e) {
+            CustomExceptionHandler.log(this, "sendGuaranteedCallMessageImmediate error: " + e.getMessage());
+            CustomExceptionHandler.logError(this, e);
+        }
+    }
+
     private void processRingingCall() {
         try {
             sendNotificationRunnable = null;
@@ -500,7 +606,7 @@ public class CallMonitorService extends Service {
 
             CustomExceptionHandler.log(this, "Call message built = " + msg.replace("\n", " | "));
 
-            sendGuaranteedMessage("call", msg);
+            sendGuaranteedCallMessageImmediate("call", msg);
 
             CustomExceptionHandler.log(this, "Calling attemptAutoAnswer()");
             attemptAutoAnswer();
