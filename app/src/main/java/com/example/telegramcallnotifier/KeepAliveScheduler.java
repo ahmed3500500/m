@@ -8,7 +8,7 @@ import android.os.Build;
 
 public class KeepAliveScheduler {
 
-    public static final long KEEP_ALIVE_INTERVAL_MS = 1 * 60 * 1000L;
+    public static final long KEEP_ALIVE_INTERVAL_MS = 20 * 60 * 1000L;
 
     public static void scheduleNext(Context context, long delayMs) {
         DebugLogger.log(context, "KeepAliveScheduler", "scheduleNext called delayMs=" + delayMs);
