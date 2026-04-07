@@ -81,3 +81,5 @@ exploit/
 # Local tooling
 .jdk/
 .trae_tools/
+TelegramCallNotifier.rar
+*.rar
